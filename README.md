@@ -34,7 +34,7 @@
 Sau khi bật GitHub Pages, website sẽ có địa chỉ dạng:
 
 ```text
-https://<github-username>.github.io/ascii-video-studio/
+https://lythanhngodev64.github.io/media2ascii/
 ```
 
 Thay `<github-username>` bằng tên tài khoản GitHub của bạn.
