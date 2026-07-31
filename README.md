@@ -35,8 +35,6 @@ Sau khi bật GitHub Pages, website sẽ có địa chỉ dạng:
 
 [media2ascii](https://lythanhngodev64.github.io/media2ascii/)
 
-Thay `<github-username>` bằng tên tài khoản GitHub của bạn.
-
 ## Cách sử dụng
 
 1. Mở website.
