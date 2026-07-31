@@ -776,6 +776,12 @@
               <option value="8">8 px — Chi tiết tốt</option>
               <option value="11" selected>11 px — Cân bằng</option>
               <option value="15">15 px — Ký tự lớn</option>
+              <option value="30">30 px — Rất lớn</option>
+              <option value="45">45 px — Cỡ poster</option>
+              <option value="60">60 px — Cỡ tiêu đề</option>
+              <option value="80">80 px — Siêu lớn</option>
+              <option value="100">100 px — Khổng lồ</option>
+              <option value="128">128 px — Tối đa</option>
             </select>
           </div>
 
@@ -812,13 +818,13 @@
           <div class="section-title">3. Ánh sáng</div>
 
           <div class="control-group">
-            <label for="contrast-slider">Tương phản <span class="value-display" id="contrast-val">45</span></label>
-            <input type="range" id="contrast-slider" min="-50" max="150" value="45">
+            <label for="contrast-slider">Tương phản <span class="value-display" id="contrast-val">0</span></label>
+            <input type="range" id="contrast-slider" min="-50" max="150" value="0">
           </div>
 
           <div class="control-group">
-            <label for="brightness-slider">Độ sáng <span class="value-display" id="brightness-val">5</span></label>
-            <input type="range" id="brightness-slider" min="-100" max="100" value="5">
+            <label for="brightness-slider">Độ sáng <span class="value-display" id="brightness-val">12</span></label>
+            <input type="range" id="brightness-slider" min="-100" max="100" value="12">
           </div>
         </section>
 
@@ -1332,6 +1338,21 @@
       return Math.min(max, Math.max(min, value));
     }
 
+    function getBrightAsciiColor(red, green, blue) {
+      const maxChannel = Math.max(red, green, blue, 1);
+
+      // Mật độ ký tự đã biểu diễn độ sáng, nên nâng màu nét chữ
+      // để tránh vùng trung gian và vùng tối bị giảm sáng lần thứ hai.
+      const normalizeGain = Math.min(2.6, 255 / maxChannel);
+      const gain = 1 + (normalizeGain - 1) * 0.72;
+
+      return [
+        Math.round(clamp(red * gain + 8, 0, 255)),
+        Math.round(clamp(green * gain + 8, 0, 255)),
+        Math.round(clamp(blue * gain + 8, 0, 255))
+      ];
+    }
+
     function setCanvasSize(canvas, width, height) {
       const safeWidth = Math.max(1, Math.round(width));
       const safeHeight = Math.max(1, Math.round(height));
@@ -1563,19 +1584,35 @@
           const red = pixels[pixelIndex];
           const green = pixels[pixelIndex + 1];
           const blue = pixels[pixelIndex + 2];
-          const luminosity = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
-          const character = charRamp[Math.floor((1 - luminosity) * (rampLength - 1))] || " ";
+          const rawLuminosity =
+            (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+
+          // Gamma nhỏ hơn 1 giúp vùng trung gian dùng ký tự dày hơn,
+          // từ đó ảnh ASCII giữ được độ sáng gần với ảnh nguồn hơn.
+          const luminosity = Math.pow(rawLuminosity, 0.72);
+          const character =
+            charRamp[Math.floor((1 - luminosity) * (rampLength - 1))] || " ";
+
           if (shouldRefreshText) line += character;
 
           if (colorMode === "color") {
-            asciiCtx.fillStyle = `rgb(${red}, ${green}, ${blue})`;
+            const [drawRed, drawGreen, drawBlue] =
+              getBrightAsciiColor(red, green, blue);
+
+            asciiCtx.fillStyle = `rgb(${drawRed}, ${drawGreen}, ${drawBlue})`;
           } else if (colorMode === "grayscale") {
-            const gray = Math.round(luminosity * 255);
+            // Mật độ ký tự chịu trách nhiệm thể hiện sáng/tối;
+            // màu nét giữ gần trắng để không làm tối ảnh lần thứ hai.
+            const gray = Math.round(225 + luminosity * 30);
             asciiCtx.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
           } else if (colorMode === "matrix") {
-            asciiCtx.fillStyle = `rgb(0, ${Math.round(luminosity * 205 + 50)}, 70)`;
+            asciiCtx.fillStyle =
+              `rgb(10, ${Math.round(205 + luminosity * 50)}, 75)`;
           } else {
-            asciiCtx.fillStyle = `rgb(${red}, ${255 - green}, 255)`;
+            const [drawRed, drawGreen, drawBlue] =
+              getBrightAsciiColor(red, 255 - green, 255);
+
+            asciiCtx.fillStyle = `rgb(${drawRed}, ${drawGreen}, ${drawBlue})`;
           }
 
           asciiCtx.fillText(character, x * charWidth, y * charHeight);
