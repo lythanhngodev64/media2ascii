@@ -1,6 +1,6 @@
 # ASCII Video Studio
 
-Ứng dụng web chuyển ảnh và video thành nghệ thuật ASCII ngay trong trình duyệt, hỗ trợ xem trước theo thời gian thực và xuất kết quả ra PNG, TXT hoặc MP4.
+Ứng dụng web chuyển ảnh và video sang ASCII ngay trong trình duyệt, hỗ trợ xem trước theo thời gian thực và xuất kết quả ra PNG, TXT hoặc MP4.
 
 ## Tính năng
 
@@ -74,42 +74,6 @@ Sau đó mở:
 http://localhost:8080
 ```
 
-### Dùng Visual Studio Code
-
-Cài tiện ích **Live Server**, sau đó nhấn chuột phải vào `index.html` và chọn **Open with Live Server**.
-
-## Đăng lên GitHub Pages
-
-1. Tạo một repository công khai trên GitHub.
-2. Đưa file ứng dụng vào repository và đổi tên thành `index.html`.
-3. Vào **Settings → Pages**.
-4. Tại **Source**, chọn **Deploy from a branch**.
-5. Chọn:
-   - Branch: `main`
-   - Folder: `/(root)`
-6. Nhấn **Save**.
-
-GitHub sẽ cung cấp đường dẫn website sau khi quá trình triển khai hoàn tất.
-
-## Cấu trúc dự án
-
-```text
-ascii-video-studio/
-├── index.html
-└── README.md
-```
-
-Toàn bộ giao diện, CSS và JavaScript hiện nằm trong `index.html`.
-
-## Công nghệ sử dụng
-
-- HTML5
-- CSS3
-- JavaScript thuần
-- Canvas API
-- MediaRecorder API
-- FFmpeg WebAssembly
-
 ## Quyền riêng tư
 
 Ảnh và video được xử lý trực tiếp trên trình duyệt của người dùng. Ứng dụng không chủ động tải nội dung đã chọn lên máy chủ.
@@ -155,7 +119,3 @@ Bạn có thể tạo issue hoặc pull request để:
 - Thêm bộ ký tự ASCII.
 - Cải thiện hiệu năng xuất MP4.
 - Cải thiện giao diện và khả năng tương thích trình duyệt.
-
-## Giấy phép
-
-Dự án hiện chưa khai báo giấy phép mã nguồn mở. Hãy thêm file `LICENSE` trước khi cho phép người khác sao chép, sửa đổi hoặc phân phối mã nguồn.
