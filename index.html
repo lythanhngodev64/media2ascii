@@ -8,7 +8,7 @@
   <style>
     :root {
       --bg: #070b13;
-      --panel: rgba(18, 25, 40, 0.94);
+      --panel: rgba(14, 21, 36, 0.88);
       --panel-strong: #121928;
       --panel-soft: #0c1321;
       --accent: #22d3ee;
@@ -32,19 +32,83 @@
 
     html {
       min-width: 320px;
-      background: var(--bg);
+      background: #050812;
     }
 
     body {
+      position: relative;
+      isolation: isolate;
       min-height: 100vh;
       min-height: 100dvh;
       overflow-x: hidden;
       color: var(--text);
       font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
       background:
-        radial-gradient(circle at 8% 0%, rgba(34, 211, 238, 0.12), transparent 28rem),
-        radial-gradient(circle at 100% 15%, rgba(59, 130, 246, 0.12), transparent 30rem),
-        var(--bg);
+        linear-gradient(145deg, #050812 0%, #091225 48%, #070b16 100%);
+    }
+
+    /*
+      Hai lớp gradient cố định chỉ chuyển động bằng transform/opacity.
+      Cách này tạo hiệu ứng chậm, mượt và hạn chế repaint khi đang render video.
+    */
+    body::before,
+    body::after {
+      position: fixed;
+      z-index: 0;
+      inset: -28vmax;
+      pointer-events: none;
+      content: "";
+      backface-visibility: hidden;
+      transform-origin: center;
+      will-change: transform, opacity;
+    }
+
+    body::before {
+      background:
+        radial-gradient(circle at 18% 24%, rgba(34, 211, 238, 0.24) 0 8%, transparent 29%),
+        radial-gradient(circle at 78% 18%, rgba(59, 130, 246, 0.22) 0 7%, transparent 28%),
+        radial-gradient(circle at 64% 78%, rgba(139, 92, 246, 0.18) 0 9%, transparent 31%);
+      opacity: 0.9;
+      animation: ambient-gradient-drift 42s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+    }
+
+    body::after {
+      background:
+        radial-gradient(circle at 30% 72%, rgba(14, 165, 233, 0.15) 0 8%, transparent 30%),
+        radial-gradient(circle at 76% 62%, rgba(217, 70, 239, 0.12) 0 7%, transparent 28%),
+        radial-gradient(circle at 52% 34%, rgba(45, 212, 191, 0.1) 0 6%, transparent 25%);
+      opacity: 0.62;
+      animation: ambient-gradient-orbit 54s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate-reverse;
+    }
+
+    @keyframes ambient-gradient-drift {
+      0% {
+        transform: translate3d(-5%, -4%, 0) rotate(-4deg) scale(1);
+        opacity: 0.72;
+      }
+      50% {
+        transform: translate3d(4%, 3%, 0) rotate(5deg) scale(1.07);
+        opacity: 0.94;
+      }
+      100% {
+        transform: translate3d(7%, -2%, 0) rotate(10deg) scale(1.12);
+        opacity: 0.8;
+      }
+    }
+
+    @keyframes ambient-gradient-orbit {
+      0% {
+        transform: translate3d(5%, 5%, 0) rotate(7deg) scale(1.04);
+        opacity: 0.46;
+      }
+      50% {
+        transform: translate3d(-3%, -4%, 0) rotate(-5deg) scale(1.1);
+        opacity: 0.68;
+      }
+      100% {
+        transform: translate3d(-7%, 3%, 0) rotate(-11deg) scale(1.06);
+        opacity: 0.54;
+      }
     }
 
     button,
@@ -70,7 +134,21 @@
       display: none !important;
     }
 
+    #particle-canvas {
+      position: fixed;
+      z-index: 1;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      opacity: 0.88;
+      mix-blend-mode: screen;
+      transform: translateZ(0);
+    }
+
     .app-shell {
+      position: relative;
+      z-index: 2;
       width: min(100%, 1800px);
       margin: 0 auto;
       padding: 18px;
@@ -584,6 +662,10 @@
     }
 
     @media (max-width: 560px) {
+      #particle-canvas {
+        opacity: 0.65;
+      }
+
       .app-shell {
         padding: 9px;
       }
@@ -613,10 +695,20 @@
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
       }
+
+      body::before,
+      body::after {
+        animation: none !important;
+      }
+
+      #particle-canvas {
+        display: none !important;
+      }
     }
   </style>
 </head>
 <body>
+  <canvas id="particle-canvas" aria-hidden="true"></canvas>
   <main class="app-shell">
     <header class="app-header">
       <div>
@@ -774,6 +866,397 @@
 
   <script>
     "use strict";
+
+    // --- LƯỚI CHẤM TOÀN MÀN HÌNH TƯƠNG TÁC THEO CHUỘT ---
+    const particleCanvas = document.getElementById("particle-canvas");
+    const particleCtx = particleCanvas.getContext("2d", { alpha: true });
+    const particleMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    let particleAnimationFrameId = 0;
+    let particleLastFrameAt = 0;
+    let particleViewportWidth = window.innerWidth;
+    let particleViewportHeight = window.innerHeight;
+    let particleDpr = 1;
+    let dotGrid = [];
+    let dotGridSpacing = 27;
+    let dotGridOffsetX = 0;
+    let dotGridOffsetY = 0;
+    let pointerRipples = [];
+
+    const dotPointer = {
+      targetX: particleViewportWidth / 2,
+      targetY: particleViewportHeight / 2,
+      x: particleViewportWidth / 2,
+      y: particleViewportHeight / 2,
+      active: false,
+      visibility: 0
+    };
+
+    const DOT_COLORS = [
+      [34, 211, 238],
+      [96, 165, 250],
+      [129, 140, 248],
+      [167, 139, 250]
+    ];
+
+    function clampDotGrid(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function smoothstepDotGrid(edge0, edge1, value) {
+      const normalized = clampDotGrid((value - edge0) / (edge1 - edge0), 0, 1);
+      return normalized * normalized * (3 - 2 * normalized);
+    }
+
+    function getDotGridSettings() {
+      const compactScreen = particleViewportWidth < 700;
+      const lowPowerDevice =
+        Number.isFinite(navigator.hardwareConcurrency) &&
+        navigator.hardwareConcurrency <= 4;
+
+      if (compactScreen || lowPowerDevice) {
+        return {
+          spacing: 30,
+          interactionRadius: 145,
+          displacement: 15,
+          baseRadius: 0.72
+        };
+      }
+
+      if (particleViewportWidth > 1700) {
+        return {
+          spacing: 29,
+          interactionRadius: 205,
+          displacement: 22,
+          baseRadius: 0.82
+        };
+      }
+
+      return {
+        spacing: 27,
+        interactionRadius: 185,
+        displacement: 19,
+        baseRadius: 0.78
+      };
+    }
+
+    let dotGridSettings = getDotGridSettings();
+
+    function buildDotGrid() {
+      dotGridSettings = getDotGridSettings();
+      dotGridSpacing = dotGridSettings.spacing;
+
+      const columns = Math.ceil(particleViewportWidth / dotGridSpacing) + 4;
+      const rows = Math.ceil(particleViewportHeight / dotGridSpacing) + 4;
+
+      dotGridOffsetX =
+        (particleViewportWidth - (columns - 1) * dotGridSpacing) / 2;
+      dotGridOffsetY =
+        (particleViewportHeight - (rows - 1) * dotGridSpacing) / 2;
+
+      dotGrid = [];
+
+      for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column < columns; column += 1) {
+          const index = row * columns + column;
+
+          dotGrid.push({
+            x: dotGridOffsetX + column * dotGridSpacing,
+            y: dotGridOffsetY + row * dotGridSpacing,
+            row,
+            column,
+            phase: (row * 0.37 + column * 0.23) % (Math.PI * 2),
+            color: DOT_COLORS[index % DOT_COLORS.length]
+          });
+        }
+      }
+    }
+
+    function resizeParticleCanvas() {
+      particleViewportWidth = window.innerWidth;
+      particleViewportHeight = window.innerHeight;
+      particleDpr = Math.min(window.devicePixelRatio || 1, 1.5);
+
+      particleCanvas.width = Math.max(
+        1,
+        Math.round(particleViewportWidth * particleDpr)
+      );
+      particleCanvas.height = Math.max(
+        1,
+        Math.round(particleViewportHeight * particleDpr)
+      );
+
+      particleCanvas.style.width = `${particleViewportWidth}px`;
+      particleCanvas.style.height = `${particleViewportHeight}px`;
+
+      particleCtx.setTransform(particleDpr, 0, 0, particleDpr, 0, 0);
+      buildDotGrid();
+    }
+
+    function drawGridDot(x, y, radius, color, alpha) {
+      const [red, green, blue] = color;
+
+      if (alpha <= 0.002 || radius <= 0.05) return;
+
+      if (radius > 1.05) {
+        particleCtx.beginPath();
+        particleCtx.arc(x, y, radius * 3.6, 0, Math.PI * 2);
+        particleCtx.fillStyle =
+          `rgba(${red}, ${green}, ${blue}, ${alpha * 0.075})`;
+        particleCtx.fill();
+      }
+
+      particleCtx.beginPath();
+      particleCtx.arc(x, y, radius, 0, Math.PI * 2);
+      particleCtx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+      particleCtx.fill();
+    }
+
+    function addPointerRipple(x, y) {
+      pointerRipples.push({
+        x,
+        y,
+        radius: 0,
+        alpha: 0.45
+      });
+
+      if (pointerRipples.length > 4) {
+        pointerRipples.shift();
+      }
+    }
+
+    function drawPointerRipples() {
+      for (let index = pointerRipples.length - 1; index >= 0; index -= 1) {
+        const ripple = pointerRipples[index];
+
+        ripple.radius += 3.2;
+        ripple.alpha *= 0.955;
+
+        particleCtx.beginPath();
+        particleCtx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
+        particleCtx.strokeStyle = `rgba(96, 165, 250, ${ripple.alpha})`;
+        particleCtx.lineWidth = 1;
+        particleCtx.stroke();
+
+        if (ripple.alpha < 0.012) {
+          pointerRipples.splice(index, 1);
+        }
+      }
+    }
+
+    function drawPointerField() {
+      if (dotPointer.visibility <= 0.01) return;
+
+      const glowRadius = dotGridSettings.interactionRadius * 0.92;
+      const glow = particleCtx.createRadialGradient(
+        dotPointer.x,
+        dotPointer.y,
+        0,
+        dotPointer.x,
+        dotPointer.y,
+        glowRadius
+      );
+
+      glow.addColorStop(
+        0,
+        `rgba(34, 211, 238, ${0.085 * dotPointer.visibility})`
+      );
+      glow.addColorStop(
+        0.42,
+        `rgba(96, 165, 250, ${0.035 * dotPointer.visibility})`
+      );
+      glow.addColorStop(1, "rgba(96, 165, 250, 0)");
+
+      particleCtx.fillStyle = glow;
+      particleCtx.beginPath();
+      particleCtx.arc(
+        dotPointer.x,
+        dotPointer.y,
+        glowRadius,
+        0,
+        Math.PI * 2
+      );
+      particleCtx.fill();
+    }
+
+    function renderDotGrid(timestamp) {
+      particleAnimationFrameId = requestAnimationFrame(renderDotGrid);
+
+      // Khoảng 30 FPS để tránh tranh tài nguyên với phần render video ASCII.
+      if (timestamp - particleLastFrameAt < 32) return;
+      particleLastFrameAt = timestamp;
+
+      particleCtx.clearRect(
+        0,
+        0,
+        particleViewportWidth,
+        particleViewportHeight
+      );
+
+      dotPointer.x += (dotPointer.targetX - dotPointer.x) * 0.16;
+      dotPointer.y += (dotPointer.targetY - dotPointer.y) * 0.16;
+      dotPointer.visibility +=
+        ((dotPointer.active ? 1 : 0) - dotPointer.visibility) * 0.085;
+
+      const time = timestamp * 0.001;
+      const radius = dotGridSettings.interactionRadius;
+      const maxDisplacement = dotGridSettings.displacement;
+      const baseRadius = dotGridSettings.baseRadius;
+
+      particleCtx.save();
+      particleCtx.globalCompositeOperation = "lighter";
+
+      drawPointerField();
+
+      for (const dot of dotGrid) {
+        const dx = dot.x - dotPointer.x;
+        const dy = dot.y - dotPointer.y;
+        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        const proximity =
+          dotPointer.visibility *
+          (1 - smoothstepDotGrid(radius * 0.18, radius, distance));
+
+        /*
+          Trường "anti-gravity":
+          - vùng sát chuột được đẩy ra ngoài;
+          - vòng giữa hơi xoáy;
+          - các chấm đàn hồi về đúng hàng và cột khi chuột đi khỏi.
+        */
+        const normalizedX = dx / distance;
+        const normalizedY = dy / distance;
+        const force = Math.pow(proximity, 1.7) * maxDisplacement;
+        const swirl =
+          Math.sin((distance / radius) * Math.PI) *
+          proximity *
+          maxDisplacement *
+          0.18;
+
+        const idleX =
+          Math.sin(time * 0.34 + dot.phase) * 0.32;
+        const idleY =
+          Math.cos(time * 0.28 + dot.phase * 1.13) * 0.32;
+
+        const renderedX =
+          dot.x +
+          normalizedX * force -
+          normalizedY * swirl +
+          idleX;
+
+        const renderedY =
+          dot.y +
+          normalizedY * force +
+          normalizedX * swirl +
+          idleY;
+
+        const ring =
+          Math.exp(
+            -Math.pow(
+              (distance - radius * 0.58) / (radius * 0.19),
+              2
+            )
+          ) * dotPointer.visibility;
+
+        const renderedRadius =
+          baseRadius +
+          proximity * 1.45 +
+          ring * 0.42;
+
+        const baseAlpha =
+          0.17 +
+          Math.sin(time * 0.42 + dot.phase) * 0.025;
+
+        const renderedAlpha =
+          baseAlpha +
+          proximity * 0.55 +
+          ring * 0.2;
+
+        drawGridDot(
+          renderedX,
+          renderedY,
+          renderedRadius,
+          dot.color,
+          renderedAlpha
+        );
+      }
+
+      drawPointerRipples();
+      particleCtx.restore();
+    }
+
+    function startParticleAnimation() {
+      if (
+        particleMotionQuery.matches ||
+        document.hidden ||
+        particleAnimationFrameId
+      ) {
+        return;
+      }
+
+      particleAnimationFrameId = requestAnimationFrame(renderDotGrid);
+    }
+
+    function stopParticleAnimation() {
+      if (particleAnimationFrameId) {
+        cancelAnimationFrame(particleAnimationFrameId);
+        particleAnimationFrameId = 0;
+      }
+    }
+
+    function handleDotPointerMove(event) {
+      dotPointer.targetX = event.clientX;
+      dotPointer.targetY = event.clientY;
+      dotPointer.active = true;
+    }
+
+    window.addEventListener("pointermove", handleDotPointerMove, {
+      passive: true
+    });
+
+    window.addEventListener("pointerdown", (event) => {
+      handleDotPointerMove(event);
+      addPointerRipple(event.clientX, event.clientY);
+    }, {
+      passive: true
+    });
+
+    document.documentElement.addEventListener("pointerleave", () => {
+      dotPointer.active = false;
+    });
+
+    window.addEventListener("blur", () => {
+      dotPointer.active = false;
+    });
+
+    window.addEventListener("resize", resizeParticleCanvas, {
+      passive: true
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        stopParticleAnimation();
+      } else {
+        startParticleAnimation();
+      }
+    });
+
+    particleMotionQuery.addEventListener?.("change", () => {
+      if (particleMotionQuery.matches) {
+        stopParticleAnimation();
+        particleCtx.clearRect(
+          0,
+          0,
+          particleViewportWidth,
+          particleViewportHeight
+        );
+      } else {
+        resizeParticleCanvas();
+        startParticleAnimation();
+      }
+    });
+
+    resizeParticleCanvas();
+    startParticleAnimation();
 
     const CHAR_RAMPS = {
       dense: "$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,\"^`'. ",
