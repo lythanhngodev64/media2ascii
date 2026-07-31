@@ -33,7 +33,7 @@
 
 Sau khi bật GitHub Pages, website sẽ có địa chỉ dạng:
 
-[media2ascii]([https://google.com](https://lythanhngodev64.github.io/media2ascii/)
+[media2ascii](https://lythanhngodev64.github.io/media2ascii/)
 
 Thay `<github-username>` bằng tên tài khoản GitHub của bạn.
 
